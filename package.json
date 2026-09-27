@@ -1,0 +1,27 @@
+{
+  "name": "jevbrain-desk",
+  "version": "1.0.0",
+  "description": "Local, open-source dashboard and auto-farm keeper for Jev Brain ($JEVBRAIN) holder credits. Runs on 127.0.0.1, keeps your key encrypted, never signs transactions.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "start:no-open": "node src/server.js --no-open",
+    "demo": "node src/server.js --demo",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "solana",
+    "jevbrain",
+    "credits",
+    "keeper",
+    "dashboard"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "bs58": "^5.0.0",
+    "tweetnacl": "^1.0.3"
+  }
+}

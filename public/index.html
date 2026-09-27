@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jev Brain Desk</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <!-- ============================== AUTH SCREENS ============================== -->
+  <div id="auth" class="auth hidden">
+    <div class="auth-card">
+      <div class="brand brand-lg"><img src="/logo.svg" alt="" class="brand-logo"><div><div class="brand-name">Jev Brain Desk</div><div class="brand-sub">Local credit dashboard &amp; keeper</div></div></div>
+
+      <!-- Setup -->
+      <form id="setup-form" class="hidden" autocomplete="off">
+        <h2>Set up your wallet</h2>
+        <p class="muted">Paste the private key of a <strong>dedicated secondary wallet</strong> that holds $JEVBRAIN. It is encrypted with your password and stored only on this computer.</p>
+        <label class="field">
+          <span>Private key <small class="muted">(base58 or JSON byte array)</small></span>
+          <div class="input-row">
+            <input id="setup-key" type="password" spellcheck="false" autocomplete="off" placeholder="5Kd3... or [12,34,...]" required>
+            <button type="button" class="btn btn-ghost btn-sm" data-toggle-visibility="setup-key">Show</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input id="setup-pass" type="password" autocomplete="new-password" required>
+        </label>
+        <label class="field">
+          <span>Confirm password</span>
+          <input id="setup-pass2" type="password" autocomplete="new-password" required>
+        </label>
+        <div class="notice notice-info">
+          This app only ever signs the Jev Brain <em>login message</em>. It never signs or sends Solana transactions, and the key never leaves this process.
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="setup-submit">Encrypt &amp; save</button>
+        <p class="form-error" id="setup-error"></p>
+      </form>
+
+      <!-- Unlock -->
+      <form id="unlock-form" class="hidden" autocomplete="off">
+        <h2>Unlock</h2>
+        <p class="muted">Wallet <span class="mono" id="unlock-address">-</span></p>
+        <label class="field">
+          <span>Password</span>
+          <input id="unlock-pass" type="password" autocomplete="current-password" required autofocus>
+        </label>
+        <button type="submit" class="btn btn-primary btn-block" id="unlock-submit">Unlock</button>
+        <p class="form-error" id="unlock-error"></p>
+        <button type="button" class="link-btn danger" id="unlock-forget">Forget this wallet…</button>
+      </form>
+    </div>
+    <p class="auth-foot muted">Unofficial community tool. Not affiliated with Jev Brain. Use at your own risk.</p>
+  </div>
+
+  <!-- ============================== MAIN APP ============================== -->
+  <div id="main" class="layout hidden">
+    <aside class="sidebar">
+      <div class="brand"><img src="/logo.svg" alt="" class="brand-logo"><div><div class="brand-name">Jev Brain Desk</div><div class="brand-sub" id="version">local</div></div></div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard"><span class="nav-ico">◎</span>Dashboard</button>
+        <button class="nav-item" data-view="farm"><span class="nav-ico">⟳</span>Auto-farm</button>
+        <button class="nav-item" data-view="credits"><span class="nav-ico">≡</span>Credits &amp; history</button>
+        <button class="nav-item" data-view="market"><span class="nav-ico">⇄</span>Marketplace</button>
+        <button class="nav-item" data-view="settings"><span class="nav-ico">⚙</span>Settings</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="mini-status"><span class="dot" id="side-keeper-dot"></span><span id="side-keeper-text">Keeper stopped</span></div>
+        <div class="mini-status"><span class="dot" id="side-session-dot"></span><span id="side-session-text">No session</span></div>
+        <button class="btn btn-ghost btn-block btn-sm" id="lock-btn">🔒 Lock</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1 id="view-title">Dashboard</h1>
+          <div class="muted small" id="updated-at">Not refreshed yet</div>
+        </div>
+        <div class="topbar-actions">
+          <span class="chip mono" id="addr-chip" title="Your public wallet address">-</span>
+          <button class="btn btn-ghost btn-sm" id="copy-addr" title="Copy address">Copy</button>
+          <button class="btn btn-primary btn-sm" id="refresh-btn">↻ Check credits</button>
+        </div>
+      </header>
+
+      <div id="demo-banner" class="notice notice-demo hidden">
+        <b>DEMO MODE</b> - every number, address and order on this screen is fake. No wallet is loaded and nothing is sent to jevbrain.world.
+      </div>
+
+      <div id="nonofficial-banner" class="notice notice-warn hidden">
+        ⚠ Base URL is set to a non-official server (<span id="nonofficial-url" class="mono"></span>). Your login signature could be misused by that server. Only continue if you trust it.
+      </div>
+
+      <!-- ---------------------------------------------------------- DASHBOARD -->
+      <section class="view" id="view-dashboard">
+        <div class="grid grid-hero">
+          <div class="card card-hero">
+            <div class="card-label">Available credits</div>
+            <div class="hero-value" id="d-credits">–</div>
+            <div class="hero-sub">
+              <span>Earned <b id="d-earned">–</b></span>
+              <span>Used <b id="d-used">–</b></span>
+              <span>Redeemed <b id="d-redeemed">–</b></span>
+              <span>Transferred <b id="d-transferred">–</b></span>
+            </div>
+            <div class="hero-actions">
+              <button class="btn btn-primary" id="accrue-now">⚡ Accrue now</button>
+              <span class="muted small" id="d-last-accrual"></span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">Next accrual</div>
+            <div class="big-value mono" id="d-countdown">--:--</div>
+            <div class="muted small" id="d-keeper-line">Auto-farm is stopped</div>
+            <div class="toggle-row">
+              <label class="switch"><input type="checkbox" id="d-keeper-toggle"><span class="slider"></span></label>
+              <span>Auto-farm</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-4">
+          <div class="card">
+            <div class="card-label">Tier</div>
+            <div class="stat-value" id="d-tier">–</div>
+            <div class="muted small" id="d-tier-sub">&nbsp;</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Credits / hour</div>
+            <div class="stat-value" id="d-rate">–</div>
+            <div class="muted small" id="d-rate-sub">&nbsp;</div>
+          </div>
+          <div class="card">
+            <div class="card-label">$JEVBRAIN balance</div>
+            <div class="stat-value" id="d-tokens">–</div>
+            <div class="muted small" id="d-tokens-sub">&nbsp;</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Session</div>
+            <div class="stat-value" id="d-session">–</div>
+            <div class="muted small clamp" id="d-session-sub">&nbsp;</div>
+            <div class="btn-row">
+              <button class="btn btn-ghost btn-xs" id="validate-btn">Validate</button>
+              <button class="btn btn-ghost btn-xs" id="relogin-btn">Re-login</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <div class="card-label">Wallet</div>
+            <div class="mono break" id="d-address">–</div>
+            <a class="link small" id="d-solscan" href="#" target="_blank" rel="noopener noreferrer">View on Solscan ↗</a>
+          </div>
+          <div class="card">
+            <div class="card-label">Token market</div>
+            <div class="stat-value" id="d-price">–</div>
+            <div class="muted small" id="d-mcap">&nbsp;</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Redeem estimate (all credits)</div>
+            <div class="stat-value" id="d-redeem">–</div>
+            <div class="muted small clamp" id="d-redeem-sub">&nbsp;</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-label">Recent activity</div><button class="link-btn" data-goto="farm">Open full log →</button></div>
+          <div class="log log-compact" id="d-log"></div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- AUTO-FARM -->
+      <section class="view hidden" id="view-farm">
+        <div class="grid grid-3">
+          <div class="card">
+            <div class="card-label">Keeper</div>
+            <div class="toggle-row toggle-lg">
+              <label class="switch"><input type="checkbox" id="f-keeper-toggle"><span class="slider"></span></label>
+              <span id="f-keeper-state">Stopped</span>
+            </div>
+            <div class="muted small">Keeps your session alive and calls accrue on a schedule while this app is open.</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Interval</div>
+            <div class="input-row">
+              <input type="number" id="f-interval" min="1" max="1440" step="1">
+              <span class="muted">min</span>
+              <button class="btn btn-ghost btn-sm" id="f-interval-save">Save</button>
+            </div>
+            <div class="muted small">The server enforces its own accrual window; "interval not yet reached" is normal.</div>
+          </div>
+          <div class="card">
+            <div class="card-label">Next run</div>
+            <div class="big-value mono" id="f-countdown">--:--</div>
+            <div class="muted small" id="f-stats">&nbsp;</div>
+            <button class="btn btn-ghost btn-sm" id="f-run-now">Run now</button>
+          </div>
+        </div>
+        <div class="card card-grow">
+          <div class="card-head">
+            <div class="card-label">Live log</div>
+            <div class="btn-row">
+              <label class="check small"><input type="checkbox" id="f-autoscroll" checked> Auto-scroll</label>
+              <button class="btn btn-ghost btn-xs" id="f-clear">Clear view</button>
+            </div>
+          </div>
+          <div class="log" id="f-log"></div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- CREDITS -->
+      <section class="view hidden" id="view-credits">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-label">Accrual history (this app)</div>
+            <span class="muted small" id="c-hist-summary"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Time</th><th>Result</th><th class="num">Credits</th><th class="num">Available</th><th>Note</th></tr></thead>
+              <tbody id="c-hist-body"><tr><td colspan="5" class="empty">No accrual attempts yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-label">Server ledger (jevbrain.world)</div>
+            <button class="btn btn-ghost btn-sm" id="c-ledger-load">Load ledger</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Time</th><th>Type</th><th class="num">Amount</th><th class="num">Balance after</th><th class="num">Rate/h</th></tr></thead>
+              <tbody id="c-ledger-body"><tr><td colspan="5" class="empty">Click "Load ledger" to fetch your server-side credit history.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- MARKETPLACE -->
+      <section class="view hidden" id="view-market">
+        <div class="grid grid-2">
+          <form class="card" id="m-form" autocomplete="off">
+            <div class="card-label">Create listing</div>
+            <p class="muted small">Credits are escrowed by jevbrain.world until the listing is bought or cancelled. Buyers pay SOL directly to your wallet; this app never signs transactions.</p>
+            <label class="field">
+              <span>Credits to sell <small class="muted">(min <span id="m-min-credits">100</span> · available <b id="m-avail">–</b>)</small></span>
+              <div class="input-row">
+                <input type="number" id="m-credits" min="100" step="1" required>
+                <button type="button" class="btn btn-ghost btn-sm" id="m-max">Max</button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Price (SOL) <small class="muted">(min <span id="m-min-price">0.001</span>)</small></span>
+              <input type="number" id="m-price" min="0.001" step="0.0001" required>
+            </label>
+            <div class="rate-box">
+              <div><div class="muted small">Effective rate</div><div class="stat-value mono" id="m-rate">– SOL / 1k</div></div>
+              <div><div class="muted small">Market best (lowest)</div><div class="mono" id="m-best">–</div></div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Create listing…</button>
+            <p class="form-error" id="m-error"></p>
+          </form>
+          <div class="card">
+            <div class="card-head">
+              <div class="card-label">My open orders</div>
+              <button class="btn btn-ghost btn-sm" id="m-refresh">↻ Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th class="num">Credits</th><th class="num">Price</th><th class="num">SOL / 1k</th><th>Order</th><th></th></tr></thead>
+                <tbody id="m-mine-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="card-label">Market orders (active)</div>
+            <span class="muted small" id="m-count"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th class="num">Credits</th><th class="num">Price</th><th class="num">SOL / 1k</th><th>Seller</th><th></th></tr></thead>
+              <tbody id="m-all-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <p class="muted small">Buying is intentionally not supported here: it requires signing a Solana transaction. Use the official site with your wallet extension to buy.</p>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- SETTINGS -->
+      <section class="view hidden" id="view-settings">
+        <form class="card" id="s-form" autocomplete="off">
+          <div class="card-label">General</div>
+          <label class="field"><span>Auto-farm interval (minutes)</span><input type="number" id="s-interval" min="1" max="1440" step="1"></label>
+          <label class="field"><span>Solana RPC URL <small class="muted">(read-only balance check)</small></span><input type="url" id="s-rpc" spellcheck="false"></label>
+          <label class="field"><span>Jev Brain base URL</span><input type="url" id="s-base" spellcheck="false"></label>
+          <p class="muted small" id="s-base-hint">Leave as <span class="mono">https://jevbrain.world</span> unless you know exactly what you are doing.</p>
+          <label class="check"><input type="checkbox" id="s-autostart"> Start auto-farm automatically after unlocking</label>
+          <label class="check"><input type="checkbox" id="s-privacy"> Privacy mode (mask my address on screen, for screenshots/streaming)</label>
+          <div class="btn-row"><button type="submit" class="btn btn-primary">Save settings</button><span class="muted small" id="s-saved"></span></div>
+          <p class="form-error" id="s-error"></p>
+        </form>
+        <div class="card card-danger">
+          <div class="card-label">Danger zone</div>
+          <p class="muted small">Locking wipes the decrypted key from memory and stops the keeper. Forgetting deletes the encrypted key file from this computer; make sure you have a backup of your key elsewhere.</p>
+          <div class="btn-row">
+            <button class="btn btn-ghost" id="s-lock">🔒 Lock now</button>
+            <button class="btn btn-danger" id="s-forget">Forget wallet…</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============================== MODAL & TOASTS ============================== -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h3 id="modal-title">Confirm</h3>
+      <div id="modal-body" class="modal-body"></div>
+      <input id="modal-input" class="hidden" type="text" autocomplete="off" spellcheck="false">
+      <div class="btn-row modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+        <button class="btn btn-primary" id="modal-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+  <div id="toasts" class="toasts"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
